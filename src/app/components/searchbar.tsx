@@ -12,7 +12,7 @@ export default function SearchBar({ onSearch }: Props) {
   useEffect(() => {
     const timeout = setTimeout(() => {
       onSearch(search);
-    }, 500); // debounce 500ms
+    }, 500);
 
     return () => clearTimeout(timeout);
   }, [search, onSearch]);
