@@ -1,5 +1,6 @@
 "use client";
 import React, { useEffect, useState } from "react";
+import Link from "next/link";
 import debounce from "lodash.debounce";
 
 interface Event {
@@ -47,7 +48,6 @@ export default function Home() {
     setSearchQuery(value);
   }, 300);
 
-  // Pagination logic
   const indexOfLastEvent = currentPage * eventsPerPage;
   const indexOfFirstEvent = indexOfLastEvent - eventsPerPage;
   const currentEvents = filteredEvents.slice(
@@ -60,7 +60,7 @@ export default function Home() {
     <main className="p-6">
       <h1 className="text-2xl font-bold mb-4">Upcoming Events</h1>
 
-      {/* Search */}
+      {/* Search Bar */}
       <input
         type="text"
         placeholder="Search events..."
@@ -93,7 +93,11 @@ export default function Home() {
       {/* Event List */}
       <div className="space-y-4 mb-4">
         {currentEvents.map((event) => (
-          <div key={event.id} className="border p-4 rounded shadow-sm bg-white">
+          <Link
+            key={event.id}
+            href={`/events/${event.id}`}
+            className="block border p-4 rounded shadow-sm bg-white hover:bg-gray-50 transition"
+          >
             <h2 className="text-xl font-semibold">{event.name}</h2>
             <p>
               {event.location} – {event.date}
@@ -103,7 +107,7 @@ export default function Home() {
                 ? "Free"
                 : `Rp ${event.price.toLocaleString("id-ID")}`}
             </p>
-          </div>
+          </Link>
         ))}
       </div>
 
