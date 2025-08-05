@@ -1,22 +1,26 @@
 "use client";
-import { useState } from "react";
 
-export default function CreateEventPage() {
+import { useState } from "react";
+import { supabase } from "@/lib/supabaseClient";
+import { useRouter } from "next/navigation";
+
+export default function CreateEvent() {
+  const router = useRouter();
+
   const [formData, setFormData] = useState({
     name: "",
-    price: "",
+    location: "",
     date: "",
     time: "",
-    location: "",
+    price: "",
+    type: "free",
     description: "",
-    seats: "",
-    ticketType: "",
-    type: "free", // default: free
+    available_seats: "",
   });
 
   const handleChange = (
     e: React.ChangeEvent<
-      HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
+      HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
     >
   ) => {
     const { name, value } = e.target;
@@ -29,167 +33,101 @@ export default function CreateEventPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    const formattedData = {
-      ...formData,
-      price: Number(formData.price),
-      seats: Number(formData.seats),
-    };
+    const { error } = await supabase.from("events").insert([
+      {
+        name: formData.name,
+        location: formData.location,
+        date: formData.date,
+        time: formData.time,
+        price: parseInt(formData.price),
+        type: formData.type,
+        description: formData.description,
+        available_seats: parseInt(formData.available_seats),
+      },
+    ]);
 
-    try {
-      const res = await fetch("http://localhost:4000/events", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(formattedData),
-      });
-
-      if (!res.ok) throw new Error("Failed to create event");
-
-      alert("Event created successfully!");
-      setFormData({
-        name: "",
-        price: "",
-        date: "",
-        time: "",
-        location: "",
-        description: "",
-        seats: "",
-        ticketType: "",
-        type: "free",
-      });
-    } catch (error) {
+    if (error) {
+      console.error("Failed to create event:", error.message);
       alert("Failed to create event");
-      console.error(error);
+    } else {
+      alert("Event created successfully!");
+      router.push("/");
     }
   };
 
   return (
     <main className="max-w-xl mx-auto p-6">
-      <h1 className="text-2xl font-bold mb-6">Create Event</h1>
+      <h1 className="text-2xl font-bold mb-4">Create New Event</h1>
       <form onSubmit={handleSubmit} className="space-y-4">
-        {/* Event Name */}
-        <div>
-          <label className="block font-medium">Event Name</label>
-          <input
-            type="text"
-            name="name"
-            value={formData.name}
-            onChange={handleChange}
-            className="w-full border rounded p-2"
-            required
-          />
-        </div>
-
-        {/* Price */}
-        <div>
-          <label className="block font-medium">Price (IDR)</label>
-          <input
-            type="number"
-            name="price"
-            value={formData.price}
-            onChange={handleChange}
-            className="w-full border rounded p-2"
-            required={formData.type === "paid"}
-            disabled={formData.type === "free"}
-          />
-        </div>
-
-        {/* Type */}
-        <div>
-          <label className="block font-medium">Event Type</label>
-          <select
-            name="type"
-            value={formData.type}
-            onChange={handleChange}
-            className="w-full border rounded p-2"
-          >
-            <option value="free">Free</option>
-            <option value="paid">Paid</option>
-          </select>
-        </div>
-
-        {/* Date & Time */}
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="block font-medium">Date</label>
-            <input
-              type="date"
-              name="date"
-              value={formData.date}
-              onChange={handleChange}
-              className="w-full border rounded p-2"
-              required
-            />
-          </div>
-          <div>
-            <label className="block font-medium">Time</label>
-            <input
-              type="time"
-              name="time"
-              value={formData.time}
-              onChange={handleChange}
-              className="w-full border rounded p-2"
-              required
-            />
-          </div>
-        </div>
-
-        {/* Location */}
-        <div>
-          <label className="block font-medium">Location</label>
-          <input
-            type="text"
-            name="location"
-            value={formData.location}
-            onChange={handleChange}
-            className="w-full border rounded p-2"
-            required
-          />
-        </div>
-
-        {/* Description */}
-        <div>
-          <label className="block font-medium">Description</label>
-          <textarea
-            name="description"
-            value={formData.description}
-            onChange={handleChange}
-            className="w-full border rounded p-2"
-            rows={4}
-            required
-          />
-        </div>
-
-        {/* Available Seats */}
-        <div>
-          <label className="block font-medium">Available Seats</label>
-          <input
-            type="number"
-            name="seats"
-            value={formData.seats}
-            onChange={handleChange}
-            className="w-full border rounded p-2"
-            required
-          />
-        </div>
-
-        {/* Ticket Type */}
-        <div>
-          <label className="block font-medium">Ticket Type</label>
-          <input
-            type="text"
-            name="ticketType"
-            value={formData.ticketType}
-            onChange={handleChange}
-            className="w-full border rounded p-2"
-          />
-        </div>
-
-        {/* Submit Button */}
+        <input
+          name="name"
+          value={formData.name}
+          onChange={handleChange}
+          placeholder="Event Name"
+          className="w-full p-2 border rounded"
+          required
+        />
+        <input
+          name="location"
+          value={formData.location}
+          onChange={handleChange}
+          placeholder="Location"
+          className="w-full p-2 border rounded"
+          required
+        />
+        <input
+          name="date"
+          type="date"
+          value={formData.date}
+          onChange={handleChange}
+          className="w-full p-2 border rounded"
+          required
+        />
+        <input
+          name="time"
+          type="time"
+          value={formData.time}
+          onChange={handleChange}
+          className="w-full p-2 border rounded"
+          required
+        />
+        <input
+          name="price"
+          type="number"
+          value={formData.price}
+          onChange={handleChange}
+          placeholder="Price (IDR)"
+          className="w-full p-2 border rounded"
+          required={formData.type === "paid"}
+        />
+        <select
+          name="type"
+          value={formData.type}
+          onChange={handleChange}
+          className="w-full p-2 border rounded"
+        >
+          <option value="free">Free</option>
+          <option value="paid">Paid</option>
+        </select>
+        <textarea
+          name="description"
+          value={formData.description}
+          onChange={handleChange}
+          placeholder="Event Description"
+          className="w-full p-2 border rounded"
+        />
+        <input
+          name="available_seats"
+          type="number"
+          value={formData.available_seats}
+          onChange={handleChange}
+          placeholder="Available Seats"
+          className="w-full p-2 border rounded"
+          required
+        />
         <button
           type="submit"
-          className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+          className="w-full bg-blue-500 text-white p-2 rounded hover:bg-blue-600"
         >
           Create Event
         </button>

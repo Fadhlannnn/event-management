@@ -1,6 +1,8 @@
 "use client";
+
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
+import { supabase } from "@/lib/supabaseClient";
 
 interface Event {
   id: number;
@@ -9,6 +11,8 @@ interface Event {
   date: string;
   price: number;
   type: "free" | "paid";
+  available_seats: number;
+  description?: string;
 }
 
 export default function EventDetail() {
@@ -19,21 +23,24 @@ export default function EventDetail() {
   useEffect(() => {
     if (!id) return;
 
-    setLoading(true);
-    fetch(`http://localhost:4000/events/${id}`)
-      .then((res) => {
-        if (!res.ok) throw new Error("Event not found");
-        return res.json();
-      })
-      .then((data) => {
-        setEvent(data);
-        setLoading(false);
-      })
-      .catch((err) => {
-        console.error("Failed to fetch event:", err);
-        setLoading(false);
+    const fetchEvent = async () => {
+      const { data, error } = await supabase
+        .from("events")
+        .select("*")
+        .eq("id", Number(id))
+        .single(); // <- important
+
+      if (error) {
+        console.error("Failed to fetch event:", error.message);
         setEvent(null);
-      });
+      } else {
+        setEvent(data);
+      }
+
+      setLoading(false);
+    };
+
+    fetchEvent();
   }, [id]);
 
   if (loading) return <div className="p-6">Loading...</div>;
@@ -45,11 +52,13 @@ export default function EventDetail() {
       <p>
         {event.location} – {event.date}
       </p>
-      <p className="font-medium">
+      <p className="mt-2 font-medium">
         {event.type === "free"
           ? "Free"
           : `Rp ${event.price.toLocaleString("id-ID")}`}
       </p>
+      <p className="mt-2">Seats: {event.available_seats}</p>
+      {event.description && <p className="mt-2">{event.description}</p>}
     </main>
   );
 }
