@@ -1,4 +1,5 @@
 "use client";
+
 import { useEffect, useState } from "react";
 import debounce from "lodash.debounce";
 import { supabase } from "@/lib/supabaseClient";
@@ -19,8 +20,6 @@ export default function HomePage() {
   const [filteredEvents, setFilteredEvents] = useState<Event[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterType, setFilterType] = useState<"all" | "free" | "paid">("all");
-  const [locationFilter, setLocationFilter] = useState("all");
-  const [locations, setLocations] = useState<string[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const eventsPerPage = 5;
 
@@ -32,12 +31,6 @@ export default function HomePage() {
       } else {
         setEvents(data);
         setFilteredEvents(data);
-
-        // Ambil lokasi unik
-        const uniqueLocations = Array.from(
-          new Set(data.map((e: Event) => e.location))
-        );
-        setLocations(uniqueLocations);
       }
     };
     fetchEvents();
@@ -45,31 +38,71 @@ export default function HomePage() {
 
   useEffect(() => {
     let result = [...events];
-
-    // Filter berdasarkan tipe
     if (filterType !== "all") {
       result = result.filter((event) => event.type === filterType);
     }
-
-    // Filter berdasarkan lokasi
-    if (locationFilter !== "all") {
-      result = result.filter((event) => event.location === locationFilter);
-    }
-
-    // Filter berdasarkan pencarian
     if (searchQuery) {
       result = result.filter((event) =>
         event.name.toLowerCase().includes(searchQuery.toLowerCase())
       );
     }
-
     setFilteredEvents(result);
     setCurrentPage(1);
-  }, [searchQuery, filterType, locationFilter, events]);
+  }, [searchQuery, filterType, events]);
 
   const handleSearchChange = debounce((value: string) => {
     setSearchQuery(value);
   }, 300);
+
+  const buyTicket = async (eventId: number) => {
+    const buyerName = prompt("Enter your name:");
+    const buyerEmail = prompt("Enter your email:");
+
+    if (!buyerName || !buyerEmail) {
+      alert("Name and email are required.");
+      return;
+    }
+
+    // Cek seats
+    const { data: eventData, error: eventError } = await supabase
+      .from("events")
+      .select("available_seats")
+      .eq("id", eventId)
+      .single();
+
+    if (eventError || eventData?.available_seats <= 0) {
+      alert("No seats available.");
+      return;
+    }
+
+    // Update seats
+    const { error: updateError } = await supabase
+      .from("events")
+      .update({ available_seats: eventData.available_seats - 1 })
+      .eq("id", eventId);
+
+    if (updateError) {
+      alert("Failed to update seats.");
+      return;
+    }
+
+    // Simpan transaksi
+    const { error: transactionError } = await supabase
+      .from("transactions")
+      .insert({
+        event_id: eventId,
+        buyer_name: buyerName,
+        buyer_email: buyerEmail,
+      });
+
+    if (transactionError) {
+      alert("Failed to record transaction.");
+      return;
+    }
+
+    alert("Ticket purchased successfully!");
+    location.reload();
+  };
 
   const indexOfLast = currentPage * eventsPerPage;
   const indexOfFirst = indexOfLast - eventsPerPage;
@@ -77,8 +110,16 @@ export default function HomePage() {
   const totalPages = Math.ceil(filteredEvents.length / eventsPerPage);
 
   return (
-    <main className="p-6 max-w-3xl mx-auto">
-      <h1 className="text-3xl font-bold mb-6">Upcoming Events</h1>
+    <main className="p-6">
+      {/* Header */}
+      <div className="flex justify-between items-center mb-4">
+        <h1 className="text-2xl font-bold">Upcoming Events</h1>
+        <Link href="/events/create">
+          <button className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600">
+            Create Event
+          </button>
+        </Link>
+      </div>
 
       {/* Search Bar */}
       <input
@@ -88,7 +129,7 @@ export default function HomePage() {
         className="mb-4 p-2 border rounded w-full"
       />
 
-      {/* Filter Tipe */}
+      {/* Filter */}
       <div className="mb-4 space-x-2">
         <button
           onClick={() => setFilterType("all")}
@@ -116,31 +157,18 @@ export default function HomePage() {
         </button>
       </div>
 
-      {/* Filter Lokasi */}
-      <div className="mb-4">
-        <label className="mr-2 font-medium">Filter by Location:</label>
-        <select
-          value={locationFilter}
-          onChange={(e) => setLocationFilter(e.target.value)}
-          className="p-2 border rounded"
-        >
-          <option value="all">All</option>
-          {locations.map((loc) => (
-            <option key={loc} value={loc}>
-              {loc}
-            </option>
-          ))}
-        </select>
-      </div>
-
       {/* Event List */}
       <div className="space-y-4 mb-4">
         {currentEvents.map((event) => (
           <div
             key={event.id}
-            className="border p-4 rounded shadow bg-white flex flex-col gap-2"
+            className="border p-4 rounded shadow-sm bg-white hover:bg-gray-50 transition"
           >
-            <h2 className="text-xl font-bold">{event.name}</h2>
+            <Link href={`/events/${event.id}`}>
+              <h2 className="text-lg font-bold cursor-pointer hover:underline">
+                {event.name}
+              </h2>
+            </Link>
             <p>
               {event.location} – {event.date}
             </p>
@@ -151,13 +179,41 @@ export default function HomePage() {
             </p>
             <p>Seats Available: {event.available_seats}</p>
 
-            {/* Tombol Buy */}
-            <Link
-              href={`/events/${event.id}`}
-              className="inline-block mt-2 px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700"
-            >
-              Buy Ticket
-            </Link>
+            {/* Buy Ticket Button */}
+            <div className="mt-3">
+              <button
+                onClick={async () => {
+                  if (event.available_seats <= 0) return;
+
+                  const { data, error } = await supabase
+                    .from("events")
+                    .update({ available_seats: event.available_seats - 1 })
+                    .eq("id", event.id);
+
+                  if (error) {
+                    console.error("Failed to update seats:", error.message);
+                    alert("Gagal membeli tiket");
+                  } else {
+                    alert("Tiket berhasil dibeli");
+                    setEvents((prev) =>
+                      prev.map((e) =>
+                        e.id === event.id
+                          ? { ...e, available_seats: e.available_seats - 1 }
+                          : e
+                      )
+                    );
+                  }
+                }}
+                disabled={event.available_seats <= 0}
+                className={`px-4 py-2 rounded text-white ${
+                  event.available_seats <= 0
+                    ? "bg-gray-400 cursor-not-allowed"
+                    : "bg-green-500 hover:bg-green-600"
+                }`}
+              >
+                {event.available_seats <= 0 ? "Sold Out" : "Buy Ticket"}
+              </button>
+            </div>
           </div>
         ))}
       </div>
