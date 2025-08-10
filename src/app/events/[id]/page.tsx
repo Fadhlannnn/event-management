@@ -6,13 +6,20 @@ import { supabase } from "@/lib/supabaseClient";
 
 export default function EventDetailPage() {
   const params = useParams();
-  const eventId = params?.id;
+  const eventId = params?.id ? Number(params.id) : null;
+
   const [eventData, setEventData] = useState<any>(null);
   const [referralCode, setReferralCode] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [finalPrice, setFinalPrice] = useState<number | null>(null);
+  const [finalPrice, setFinalPrice] = useState<number>(0);
+  const [reviews, setReviews] = useState<any[]>([]);
+  const [reviewerName, setReviewerName] = useState(""); // ✅ nama reviewer
+  const [newReview, setNewReview] = useState("");
+  const [rating, setRating] = useState(5);
 
   useEffect(() => {
+    if (!eventId) return;
+
     const fetchEvent = async () => {
       const { data, error } = await supabase
         .from("events")
@@ -35,7 +42,6 @@ export default function EventDetailPage() {
         const end = data.discount_end ? new Date(data.discount_end) : null;
 
         const isTimeDiscountActive = start && end && now >= start && now <= end;
-
         const price =
           isTimeDiscountActive && data.discount_price
             ? data.discount_price
@@ -47,21 +53,35 @@ export default function EventDetailPage() {
       }
     };
 
+    const fetchReviews = async () => {
+      const { data, error } = await supabase
+        .from("reviews")
+        .select("*")
+        .eq("event_id", eventId)
+        .order("created_at", { ascending: false });
+
+      if (error) {
+        console.error("Failed to fetch reviews:", error.message);
+      } else {
+        setReviews(data);
+      }
+    };
+
     fetchEvent();
+    fetchReviews();
   }, [eventId]);
 
   const handleBuyTicket = async () => {
     if (!eventData) return;
 
     setIsLoading(true);
-    let priceToPay = finalPrice;
+    let priceToPay = finalPrice ?? eventData.price;
 
-    // Validate referral
     if (referralCode.trim()) {
       const { data: referralData, error } = await supabase
         .from("referral_codes")
         .select("*")
-        .ilike("code", referralCode.trim()) // case-insensitive
+        .ilike("code", referralCode.trim())
         .single();
 
       if (error || !referralData) {
@@ -70,7 +90,6 @@ export default function EventDetailPage() {
         return;
       }
 
-      // Check usage limit
       if (
         referralData.usage_limit &&
         referralData.used_count >= referralData.usage_limit
@@ -80,13 +99,8 @@ export default function EventDetailPage() {
         return;
       }
 
-      // Apply referral discount
-      priceToPay = Math.max(
-        0,
-        (priceToPay ?? eventData.price) - referralData.discount
-      );
+      priceToPay = Math.max(0, priceToPay - referralData.discount);
 
-      // Update referral usage
       await supabase
         .from("referral_codes")
         .update({
@@ -95,7 +109,6 @@ export default function EventDetailPage() {
         .eq("id", referralData.id);
     }
 
-    // Update available seats
     const { error: seatError } = await supabase
       .from("events")
       .update({
@@ -111,11 +124,48 @@ export default function EventDetailPage() {
     }
 
     alert(
-      `Tiket berhasil dibeli! Total bayar: Rp ${priceToPay?.toLocaleString(
+      `Tiket berhasil dibeli! Total bayar: Rp ${priceToPay.toLocaleString(
         "id-ID"
       )}`
     );
+    setEventData((prev: any) => ({
+      ...prev,
+      available_seats: prev.available_seats - 1,
+    }));
     setIsLoading(false);
+  };
+
+  const handleSubmitReview = async () => {
+    if (!newReview.trim()) return;
+
+    const { error } = await supabase.from("reviews").insert([
+      {
+        event_id: eventId,
+        name: reviewerName || "Anonymous", // ✅ simpan nama
+        comment: newReview,
+        rating,
+        user_email: "user@example.com",
+      },
+    ]);
+
+    if (error) {
+      console.error("Failed to submit review:", error.message);
+      alert("Gagal mengirim review");
+      return;
+    }
+
+    setReviews((prev) => [
+      {
+        name: reviewerName || "Anonymous",
+        comment: newReview,
+        rating,
+        created_at: new Date().toISOString(),
+      },
+      ...prev,
+    ]);
+    setReviewerName("");
+    setNewReview("");
+    setRating(5);
   };
 
   if (!eventData) return <p className="p-4">Loading event...</p>;
@@ -135,14 +185,12 @@ export default function EventDetailPage() {
       </p>
       <p className="mb-4">Seat Tersedia: {eventData.available_seats}</p>
 
-      {/* Referral Code */}
       {eventData.type === "paid" && (
         <div className="mb-4">
-          <label htmlFor="referral" className="block mb-1 font-medium">
+          <label className="block mb-1 font-medium">
             Referral Code (optional)
           </label>
           <input
-            id="referral"
             type="text"
             className="w-full p-2 border rounded"
             value={referralCode}
@@ -160,6 +208,57 @@ export default function EventDetailPage() {
       >
         {isLoading ? "Processing..." : "Buy Ticket"}
       </button>
+
+      <hr className="my-6" />
+
+      <h2 className="text-lg font-bold mb-2">Review Pengunjung</h2>
+      {reviews.length === 0 ? (
+        <p>Belum ada review.</p>
+      ) : (
+        reviews.map((r, i) => (
+          <div key={i} className="border p-2 rounded mb-2">
+            <p className="font-semibold">{r.name || "Anonymous"}</p>
+            <p className="text-yellow-500">Rating: {r.rating} ⭐</p>
+            <p>{r.comment}</p>
+            <p className="text-gray-500 text-sm">
+              {new Date(r.created_at).toLocaleString()}
+            </p>
+          </div>
+        ))
+      )}
+
+      <div className="mt-4">
+        <input
+          type="text"
+          className="w-full p-2 border rounded mb-2"
+          placeholder="Nama Anda (optional)"
+          value={reviewerName}
+          onChange={(e) => setReviewerName(e.target.value)}
+        />
+        <textarea
+          className="w-full p-2 border rounded mb-2"
+          placeholder="Tulis review..."
+          value={newReview}
+          onChange={(e) => setNewReview(e.target.value)}
+        />
+        <select
+          value={rating}
+          onChange={(e) => setRating(Number(e.target.value))}
+          className="w-full p-2 border rounded mb-2"
+        >
+          {[5, 4, 3, 2, 1].map((r) => (
+            <option key={r} value={r}>
+              {r} ⭐
+            </option>
+          ))}
+        </select>
+        <button
+          onClick={handleSubmitReview}
+          className="w-full bg-green-600 hover:bg-green-700 text-white py-2 rounded"
+        >
+          Kirim Review
+        </button>
+      </div>
     </main>
   );
 }
